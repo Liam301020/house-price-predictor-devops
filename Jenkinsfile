@@ -32,5 +32,15 @@ pipeline {
         }
       }
     }
+    stage('Security (pip-audit)') {
+        steps {
+            sh '.venv/bin/pip-audit -r requirements.txt -f json -o reports/pip-audit.json || true'
+        }
+        post {
+            always {
+                archiveArtifacts artifacts: 'reports/pip-audit.json', fingerprint: true
+            }
+        }
+    }
   }
 }
