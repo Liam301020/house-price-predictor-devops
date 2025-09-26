@@ -2,16 +2,17 @@ pipeline {
   agent any
 
   stages {
-    stage('Build & Test (Python 3.11 container)') {
-      agent {
-        docker {
-          image 'python:3.11-slim'   /
-          args '-u root'            
-        }
-      }
+    stage('Build') {
       steps {
-        sh 'python --version && pip --version'
-        sh 'pip install --no-cache-dir -r requirements.txt'
+        echo 'Installing dependencies with pip3...'
+        sh 'python3 --version && pip3 --version'
+        sh 'pip3 install --no-cache-dir -r requirements.txt'
+      }
+    }
+
+    stage('Test') {
+      steps {
+        echo 'Running pytest...'
         sh 'PYTHONPATH=. pytest --maxfail=1 --disable-warnings -q'
       }
     }
