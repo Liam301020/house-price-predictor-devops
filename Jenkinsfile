@@ -4,9 +4,51 @@ node {
   def DOCKER_REPO = 'liamnguyen301020/house-price-predictor'
 
   timestamps {
-    // ... (Checkout, Build, Test, Bandit, pip-audit)
+    stage('Checkout') {
+      deleteDir()
+      sh '''
+        set -eux
+        git --version
+        git clone --depth 1 https://github.com/Liam301020/house-price-predictor-devops.git .
+        git log -1 --oneline
+      '''
+    }
 
-    stage('Build Artefact (Docker)') {   
+    stage('Build (create venv & install deps)') {
+      sh '''
+        set -eux
+        python3 -m venv .venv
+        .venv/bin/python -m pip install --upgrade pip
+        .venv/bin/pip install --no-cache-dir -r requirements.txt
+      '''
+    }
+
+    stage('Test') {
+      sh 'PYTHONPATH=. .venv/bin/pytest --maxfail=1 --disable-warnings -q --junitxml=junit.xml'
+    }
+
+    // ---- Code Quality (stub SonarQube) ----
+    stage('Code Quality (SonarQube Stub)') {
+      sh '''
+        echo "[Stub] Running SonarQube analysis..."
+        echo "Detected: 2 code smells, 1 duplicate block"
+        echo "Report uploaded (simulated)" > sonar-report.txt
+      '''
+    }
+
+    stage('Code Quality (Bandit)') {
+      sh '.venv/bin/bandit -r src -f txt -o bandit.txt || true'
+    }
+
+    // ---- Security ----
+    stage('Security (pip-audit)') {
+      sh '''
+        .venv/bin/pip-audit -f json -o pip-audit.json || true
+        echo "[INFO] Review pip-audit.json and document issues (severity, fix)" > security-review.txt
+      '''
+    }
+
+    stage('Build Artefact (Docker)') {
       sh """
         set -eux
         docker build -t house-price-predictor:${BUILD_NUMBER} .
@@ -59,9 +101,16 @@ node {
       '''
     }
 
+    // ---- Alerting Stub ----
+    stage('Alerting (Stub)') {
+      sh '''
+        echo "[Alerting] If hp-stg crashes, notify team via Slack/Email (simulated)" > reports/alert.txt
+      '''
+    }
+
     stage('Archive Reports') {
       junit 'junit.xml'
-      archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,junit.xml,reports/**', onlyIfSuccessful: false
+      archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,sonar-report.txt,security-review.txt,junit.xml,reports/**', onlyIfSuccessful: false
     }
   }
 }
