@@ -1,0 +1,25 @@
+# Use a lightweight Python image
+FROM python:3.11-slim
+
+# Set working directory inside container
+WORKDIR /app
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all project files into container
+COPY . .
+
+# Expose Streamlit default port
+EXPOSE 8501
+
+# Healthcheck: test if port 8501 is responding
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD python -c "import socket; s=socket.socket(); s.connect(('127.0.0.1',8501))" || exit 1
+
+# Run the Streamlit app
+CMD ["streamlit", "run", "app.py", "--server.headless=true", "--server.port=8501", "--server.enableCORS=false"]
