@@ -7,3 +7,15 @@ pytest
 pytest-cov
 bandit
 pip-audit
+
+# API & backend
+fastapi==0.110.0       
+uvicorn[standard]==0.29.0
+sqlalchemy==2.0.35
+pydantic==1.10.15      
+requests
+
+# Auth & security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart
