@@ -2,18 +2,17 @@ pipeline {
   agent any
 
   stages {
-    stage('Build') {
+    stage('Build (create venv & install deps)') {
       steps {
-        echo 'Installing dependencies with pip3...'
-        sh 'python3 --version && pip3 --version'
-        sh 'pip3 install --no-cache-dir -r requirements.txt'
+        sh 'python3 -m venv .venv'
+        sh '.venv/bin/python -m pip install --upgrade pip'
+        sh '.venv/bin/pip install --no-cache-dir -r requirements.txt'
       }
     }
 
     stage('Test') {
       steps {
-        echo 'Running pytest...'
-        sh 'PYTHONPATH=. pytest --maxfail=1 --disable-warnings -q'
+        sh 'PYTHONPATH=. .venv/bin/pytest --maxfail=1 --disable-warnings -q'
       }
     }
   }
