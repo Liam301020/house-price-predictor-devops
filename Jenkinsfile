@@ -12,7 +12,24 @@ pipeline {
 
     stage('Test') {
       steps {
-        sh 'PYTHONPATH=. .venv/bin/pytest --maxfail=1 --disable-warnings -q'
+        sh 'PYTHONPATH=. .venv/bin/pytest --junitxml=reports/junit.xml --maxfail=1 --disable-warnings -q'
+      }
+      post {
+        always {
+          junit 'reports/junit.xml'
+          archiveArtifacts artifacts: 'reports/**', fingerprint: true
+        }
+      }
+    }
+
+    stage('Code Quality (Bandit)') {
+      steps {
+        sh '.venv/bin/bandit -r src -f txt -o reports/bandit.txt || true'
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'reports/bandit.txt', fingerprint: true
+        }
       }
     }
   }
