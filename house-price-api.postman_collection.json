@@ -1,0 +1,107 @@
+{
+  "info": {
+    "name": "House Price Predictor API",
+    "_postman_id": "12345678-abcd-efgh-ijkl-9876543210ab",
+    "description": "Collection for testing House Price Predictor API endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Register",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"username\": \"testuser\",\n    \"password\": \"testpass123\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8001/auth/register",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8001",
+          "path": ["auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            { "key": "username", "value": "testuser" },
+            { "key": "password", "value": "testpass123" },
+            { "key": "grant_type", "value": "password" }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:8001/auth/login",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8001",
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "Predict",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"suburb\": \"Box Hill\",\n    \"property_type\": \"House\",\n    \"bedrooms\": 3,\n    \"bathrooms\": 2,\n    \"parking\": 1,\n    \"land_size\": 450.0,\n    \"building_size\": 120.0,\n    \"postcode\": \"3128\",\n    \"schools_nearby\": 0\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8001/api/predict",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8001",
+          "path": ["api", "predict"]
+        }
+      }
+    },
+    {
+      "name": "List Records",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8001/api/records",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8001",
+          "path": ["api", "records"]
+        }
+      }
+    },
+    {
+      "name": "Delete Record",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8001/api/records/1",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8001",
+          "path": ["api", "records", "1"]
+        }
+      }
+    }
+  ]
+}

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+
 # ================== Config ==================
 DB_URL = os.getenv("DB_URL", "sqlite:///data.db")
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-jwt-key")
@@ -25,6 +26,10 @@ pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 app = FastAPI(title="House Price API", version="1.0")
+from prometheus_fastapi_instrumentator import Instrumentator
+
+# Expose /metrics endpoint
+Instrumentator().instrument(app).expose(app)
 
 # ================== DB Models ==================
 class User(Base):

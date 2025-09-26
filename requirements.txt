@@ -19,3 +19,4 @@ requests
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart
+prometheus-fastapi-instrumentator==5.11.1
