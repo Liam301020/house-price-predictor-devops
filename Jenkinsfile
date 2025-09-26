@@ -12,35 +12,34 @@ pipeline {
 
     stage('Test') {
       steps {
-        sh 'PYTHONPATH=. .venv/bin/pytest --junitxml=reports/junit.xml --maxfail=1 --disable-warnings -q'
-      }
-      post {
-        always {
-          junit 'reports/junit.xml'
-          archiveArtifacts artifacts: 'reports/**', fingerprint: true
-        }
+        sh 'PYTHONPATH=. .venv/bin/pytest --maxfail=1 --disable-warnings -q'
       }
     }
 
     stage('Code Quality (Bandit)') {
       steps {
-        sh '.venv/bin/bandit -r src -f txt -o reports/bandit.txt || true'
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'reports/bandit.txt', fingerprint: true
-        }
+        sh '.venv/bin/bandit -r src -f txt -o bandit.txt || true'
       }
     }
+
     stage('Security (pip-audit)') {
-        steps {
-            sh '.venv/bin/pip-audit -r requirements.txt -f json -o reports/pip-audit.json || true'
-        }
-        post {
-            always {
-                archiveArtifacts artifacts: 'reports/pip-audit.json', fingerprint: true
-            }
-        }
+      steps {
+        sh '.venv/bin/pip-audit -f json -o pip-audit.json || true'
+      }
+    }
+
+    stage('Build Artefact (Docker)') {
+      steps {
+        sh 'docker build -t house-price-predictor:${BUILD_NUMBER} .'
+        sh 'docker images | head -n 10'
+      }
+    }
+
+    stage('Deploy (staging)') {
+      steps {
+        sh 'docker rm -f hp-stg || true'
+        sh 'docker run -d --name hp-stg -p 8081:8501 house-price-predictor:${BUILD_NUMBER}'
+      }
     }
   }
 }
