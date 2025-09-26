@@ -1,10 +1,15 @@
 pipeline {
   agent any
+  options {
+    skipDefaultCheckout(true)  
+    timestamps()
+  }
 
   stages {
     stage('Checkout') {
       steps {
         git branch: 'main', url: 'https://github.com/Liam301020/house-price-predictor-devops.git'
+        sh 'echo "Rev: $(git rev-parse --short HEAD)"'
       }
     }
 
@@ -40,7 +45,7 @@ pipeline {
       steps {
         sh '''
           mkdir -p reports
-          .venv/bin/pip-audit -f json -o reports/pip-audit.json || true
+          .venv/bin/pip-audit -r requirements.txt -f json -o reports/pip-audit.json || true
         '''
       }
     }
@@ -48,6 +53,7 @@ pipeline {
     stage('Build Artefact (Docker)') {
       steps {
         sh '''
+          docker version
           docker build -t house-price-predictor:${BUILD_NUMBER} .
           docker images | head -n 10
         '''
@@ -59,6 +65,8 @@ pipeline {
         sh '''
           docker rm -f hp-stg || true
           docker run -d --name hp-stg -p 8081:8501 house-price-predictor:${BUILD_NUMBER}
+          sleep 2
+          docker ps --filter name=hp-stg
         '''
       }
     }
@@ -66,8 +74,12 @@ pipeline {
 
   post {
     always {
-      junit 'reports/junit.xml'
-      archiveArtifacts artifacts: 'reports/**', onlyIfSuccessful: false
+      script {
+        if (fileExists('reports/junit.xml')) {
+          junit 'reports/junit.xml'
+        }
+      }
+      archiveArtifacts artifacts: 'reports/**', fingerprint: true, onlyIfSuccessful: false
     }
   }
 }
