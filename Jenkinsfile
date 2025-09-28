@@ -1,11 +1,10 @@
-// Jenkinsfile (Scripted Pipeline) — matches table: pytest, Bandit, pip-audit, SonarQube (stub)
+// Jenkinsfile (Scripted Pipeline) — Local Code Quality (pylint + radon + xenon), no SonarQube/CodeClimate
 
 node {
   def DOCKER_REPO = 'liamnguyen301020/house-price-predictor'
 
   timestamps {
 
-    // 1) Checkout
     stage('Checkout') {
       deleteDir()
       sh '''
@@ -16,17 +15,18 @@ node {
       '''
     }
 
-    // 2) Build venv & install deps
     stage('Build (venv & deps)') {
       sh '''
         set -eux
         python3 -m venv .venv
         .venv/bin/python -m pip install --upgrade pip
         .venv/bin/pip install --no-cache-dir -r requirements.txt
+
+        # Local code-quality toolchain (no SaaS, no tokens)
+        .venv/bin/pip install --no-cache-dir pylint radon xenon
       '''
     }
 
-    // 3) Tests (pytest + coverage -> JUnit + coverage.xml)
     stage('Test') {
       sh '''
         set -eux
@@ -37,16 +37,35 @@ node {
       '''
     }
 
-    // 4) Code Quality (SonarQube - stub only, not running scanner)
-    stage('Code Quality (SonarQube - STUB)') {
+    // Local Code Quality: duplication, smells, complexity — all offline
+    stage('Code Quality (pylint / radon / xenon)') {
       sh '''
         set -eux
-        echo "[SonarQube STUB] Code quality analysis would run here in a full setup."
-        echo "[SonarQube STUB] Skipped due to env constraints (permissions/arch/credentials)."
+        mkdir -p reports
+
+        # 1) Full pylint run (code smells, bad practices, etc.)
+        #    Fail build if overall score < 8.0
+        .venv/bin/pylint src --fail-under=8.0 | tee reports/pylint.txt
+
+        # 2) Explicit duplication check (R0801)
+        #    This does not fail the build; it just reports.
+        .venv/bin/pylint src --disable=all --enable=R0801 | tee reports/duplication.txt || true
+
+        # 3) Complexity & maintainability
+        #    - radon: produce reports (text) for archive
+        .venv/bin/radon cc src -s -a | tee reports/radon-cc.txt
+        .venv/bin/radon mi src -s    | tee reports/radon-mi.txt
+
+        #    - xenon: enforce cyclomatic complexity thresholds (fail build on violation)
+        #      A = best, F = worst. Tune as needed:
+        #      --max-absolute: worst single block/function
+        #      --max-modules : worst per-module average
+        #      --max-average : overall project average
+        .venv/bin/xenon src --max-absolute B --max-modules B --max-average A
       '''
     }
 
-    // 5) Security lint (Bandit)
+    // Security lint (Bandit)
     stage('Code Quality (Bandit)') {
       sh '''
         set -eux
@@ -54,7 +73,7 @@ node {
       '''
     }
 
-    // 6) Dependency Security (pip-audit)
+    // Dependency Security (pip-audit)
     stage('Security (pip-audit)') {
       sh '''
         set -eux
@@ -63,7 +82,7 @@ node {
       '''
     }
 
-    // 7) Build Docker artifact
+    // Build Docker artifact
     stage('Build Artifact (Docker)') {
       sh """
         set -eux
@@ -72,7 +91,7 @@ node {
       """
     }
 
-    // 8) Deploy to local staging
+    // Deploy to a local staging container
     stage('Deploy (staging)') {
       sh '''
         set -eux
@@ -81,7 +100,7 @@ node {
       '''
     }
 
-    // 9) Release to Docker Hub
+    // Release to Docker Hub
     stage('Release (Docker Hub)') {
       withCredentials([usernamePassword(
         credentialsId: 'dockerhub-creds',
@@ -104,7 +123,7 @@ node {
       }
     }
 
-    // 10) Monitoring: container health + logs
+    // Monitoring: container health + logs (basic, no SaaS)
     stage('Monitoring (health-check)') {
       sh '''
         set -eux
@@ -119,12 +138,21 @@ node {
       '''
     }
 
-    // 11) Alerting (stub)
-    stage('Alerting (Stub)') {
-      sh 'echo "[Alerting] If hp-stg crashes, notify team via Slack/Email (simulated)" > reports/alert.txt'
+    // Alerting
+    stage('Alerting (basic)') {
+      sh '''
+        set -eux
+        status=$(docker inspect -f "{{.State.Health.Status}}" hp-stg || echo "unknown")
+        if [ "$status" != "healthy" ]; then
+          echo "ALERT: hp-stg is not healthy (status=$status)" | tee reports/alert.txt
+          exit 1
+        else
+          echo "hp-stg healthy — no alert." | tee reports/alert.txt
+        fi
+      '''
     }
 
-    // 12) Publish reports
+    // Publish reports
     stage('Archive Reports') {
       junit 'junit.xml'
       archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,security-review.txt,junit.xml,coverage.xml,reports/**', onlyIfSuccessful: false
