@@ -27,27 +27,27 @@ node {
       sh 'PYTHONPATH=. .venv/bin/pytest --maxfail=1 --disable-warnings -q --junitxml=junit.xml'
     }
 
-// ---- Code Quality (SonarQube) ----
-stage('Code Quality (SonarQube)') {
-  steps {
-    withCredentials([string(credentialsId: 'ef5f5354-9dd2-4fa1-a722-ec02bcf6b580', variable: 'SONAR_TOKEN')]) {
-      sh '''
-        sonar-scanner \
-          -Dsonar.projectKey=house-price-predictor \
-          -Dsonar.sources=. \
-          -Dsonar.host.url=http://localhost:9000 \
-          -Dsonar.login=$SONAR_TOKEN
-      '''
+    // ---- Code Quality (SonarQube) ----
+    stage('Code Quality (SonarQube)') {
+      withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {  // dùng ID credential bạn đã tạo
+        sh """
+          docker run --rm \
+            -e SONAR_HOST_URL=http://localhost:9000 \
+            -e SONAR_LOGIN=${SONAR_TOKEN} \
+            -v "\$PWD:/usr/src" \
+            sonarsource/sonar-scanner-cli:latest \
+            sonar-scanner \
+              -Dsonar.projectKey=house-price-predictor \
+              -Dsonar.sources=/usr/src \
+              -Dsonar.working.directory=/usr/src/.sonar
+        """
+      }
     }
-  }
-}
 
-// ---- Code Quality (Bandit) ----
-stage('Code Quality (Bandit)') {
-  steps {
-    sh '.venv/bin/bandit -r src -f txt -o bandit.txt || true'
-  }
-}
+    // ---- Code Quality (Bandit) ----
+    stage('Code Quality (Bandit)') {
+      sh '.venv/bin/bandit -r src -f txt -o bandit.txt || true'
+    }
 
     // ---- Security ----
     stage('Security (pip-audit)') {
@@ -104,7 +104,6 @@ stage('Code Quality (Bandit)') {
           [ "$st" = "healthy" ] && break
           sleep 3
         done
-
         mkdir -p reports
         docker logs hp-stg --since 2m > reports/app-logs.txt || true
       '''
@@ -112,14 +111,12 @@ stage('Code Quality (Bandit)') {
 
     // ---- Alerting Stub ----
     stage('Alerting (Stub)') {
-      sh '''
-        echo "[Alerting] If hp-stg crashes, notify team via Slack/Email (simulated)" > reports/alert.txt
-      '''
+      sh 'echo "[Alerting] If hp-stg crashes, notify team via Slack/Email (simulated)" > reports/alert.txt'
     }
 
     stage('Archive Reports') {
       junit 'junit.xml'
-      archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,sonar-report.txt,security-review.txt,junit.xml,reports/**', onlyIfSuccessful: false
+      archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,security-review.txt,junit.xml,reports/**', onlyIfSuccessful: false
     }
   }
 }
