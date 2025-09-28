@@ -35,8 +35,14 @@ node {
     }
 
     stage('Test') {
-      sh 'PYTHONPATH=. .venv/bin/pytest --maxfail=1 --disable-warnings -q --junitxml=junit.xml'
-    }
+  sh '''
+    set -eux
+    PYTHONPATH=. .venv/bin/pytest \
+      --maxfail=1 --disable-warnings -q \
+      --junitxml=junit.xml \
+      --cov=src --cov-report=xml:coverage.xml
+  '''
+}
 
     // NOTE: Self-test that the Sonar token stored in Jenkins credentials works against the SonarQube server.
     stage('Sonar token self-test') {
@@ -52,22 +58,31 @@ node {
 
     // Code Quality: SonarQube (Dockerized sonar-scanner)
     stage('Code Quality (SonarQube)') {
-      withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-        sh '''
-          set -eux
-          docker run --rm \
-            --network ci-net \
-            -v "$PWD:/usr/src" \
-            -e SONAR_HOST_URL=http://sonarqube:9000 \
-            -e SONAR_TOKEN="$SONAR_TOKEN" \
-            sonarsource/sonar-scanner-cli:latest \
-            sonar-scanner \
-              -Dsonar.projectKey=house-price-predictor \
-              -Dsonar.sources=/usr/src \
-              -Dsonar.working.directory=/usr/src/.sonar
-        '''
-      }
-    }
+  withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+    sh """
+      set -eux
+
+      # Bảo đảm thư mục làm việc có thể ghi (phòng hờ)
+      mkdir -p .sonar || true
+      chmod -R a+rwx .sonar || true
+
+      docker run --rm \
+        --user 0:0 \  # IMPORTANT: tránh lỗi AccessDenied khi tạo /usr/src/.sonar
+        --network ci-net \
+        -v "\$PWD:/usr/src" \
+        -e SONAR_HOST_URL=http://sonarqube:9000 \
+        sonarsource/sonar-scanner-cli:latest \
+        sonar-scanner \
+          -Dsonar.host.url=http://sonarqube:9000 \
+          -Dsonar.login="${SONAR_TOKEN}" \
+          -Dsonar.projectKey=house-price-predictor \
+          -Dsonar.sources=/usr/src \
+          -Dsonar.working.directory=/usr/src/.sonar \
+          -Dsonar.python.version=3.11 \
+          -Dsonar.python.coverage.reportPaths=/usr/src/coverage.xml
+    """
+  }
+}
 
     // Code Quality: Bandit (security linter)
     stage('Code Quality (Bandit)') {
