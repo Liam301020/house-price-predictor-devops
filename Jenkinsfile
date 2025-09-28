@@ -4,6 +4,17 @@ node {
   def DOCKER_REPO = 'liamnguyen301020/house-price-predictor'
 
   timestamps {
+
+    // Ensure Jenkins and SonarQube are on the same Docker network
+    stage('Prepare Docker Network') {
+      sh '''
+        set -eux
+        docker network create ci-net || true
+        docker network connect ci-net sonarqube || true
+        docker network connect ci-net jenkins   || true
+      '''
+    }
+
     stage('Checkout') {
       deleteDir()
       sh '''
@@ -14,7 +25,7 @@ node {
       '''
     }
 
-    stage('Build (create venv & install deps)') {
+    stage('Build (venv & deps)') {
       sh '''
         set -eux
         python3 -m venv .venv
@@ -27,29 +38,31 @@ node {
       sh 'PYTHONPATH=. .venv/bin/pytest --maxfail=1 --disable-warnings -q --junitxml=junit.xml'
     }
 
-    // ---- Code Quality (SonarQube) ----
+    // Code Quality: SonarQube (real scan using Dockerized sonar-scanner)
     stage('Code Quality (SonarQube)') {
-      withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {  // dùng ID credential bạn đã tạo
-        sh """
+      withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+        sh '''
+          set -eux
           docker run --rm \
-            -e SONAR_HOST_URL=http://localhost:9000 \
-            -e SONAR_LOGIN=${SONAR_TOKEN} \
-            -v "\$PWD:/usr/src" \
+            --network ci-net \
+            -e SONAR_HOST_URL=http://sonarqube:9000 \
+            -e SONAR_LOGIN=$SONAR_TOKEN \
+            -v "$PWD:/usr/src" \
             sonarsource/sonar-scanner-cli:latest \
-            sonar-scanner \
-              -Dsonar.projectKey=house-price-predictor \
-              -Dsonar.sources=/usr/src \
-              -Dsonar.working.directory=/usr/src/.sonar
-        """
+              sonar-scanner \
+                -Dsonar.projectKey=house-price-predictor \
+                -Dsonar.sources=/usr/src \
+                -Dsonar.working.directory=/usr/src/.sonar
+        '''
       }
     }
 
-    // ---- Code Quality (Bandit) ----
+    // Code Quality: Bandit (security linter, kept under “quality” per brief)
     stage('Code Quality (Bandit)') {
       sh '.venv/bin/bandit -r src -f txt -o bandit.txt || true'
     }
 
-    // ---- Security ----
+    // Dependency Security (SCA)
     stage('Security (pip-audit)') {
       sh '''
         .venv/bin/pip-audit -f json -o pip-audit.json || true
@@ -57,7 +70,8 @@ node {
       '''
     }
 
-    stage('Build Artefact (Docker)') {
+    // Build Docker artifact
+    stage('Build Artifact (Docker)') {
       sh """
         set -eux
         docker build -t house-price-predictor:${BUILD_NUMBER} .
@@ -65,6 +79,7 @@ node {
       """
     }
 
+    // Deploy to a local staging container
     stage('Deploy (staging)') {
       sh '''
         set -eux
@@ -73,6 +88,7 @@ node {
       '''
     }
 
+    // Release: push to Docker Hub
     stage('Release (Docker Hub)') {
       withCredentials([usernamePassword(
         credentialsId: 'dockerhub-creds',
@@ -95,6 +111,7 @@ node {
       }
     }
 
+    // Monitoring: container health + logs (Prometheus metrics are exposed by the app)
     stage('Monitoring (health-check)') {
       sh '''
         set -eux
@@ -109,11 +126,12 @@ node {
       '''
     }
 
-    // ---- Alerting Stub ----
+    // Alerting (stub) — replace with real Slack/email later
     stage('Alerting (Stub)') {
       sh 'echo "[Alerting] If hp-stg crashes, notify team via Slack/Email (simulated)" > reports/alert.txt'
     }
 
+    // Publish reports
     stage('Archive Reports') {
       junit 'junit.xml'
       archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,security-review.txt,junit.xml,reports/**', onlyIfSuccessful: false
