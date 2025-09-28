@@ -27,18 +27,27 @@ node {
       sh 'PYTHONPATH=. .venv/bin/pytest --maxfail=1 --disable-warnings -q --junitxml=junit.xml'
     }
 
-    // ---- Code Quality (stub SonarQube) ----
-    stage('Code Quality (SonarQube Stub)') {
+// ---- Code Quality (SonarQube) ----
+stage('Code Quality (SonarQube)') {
+  steps {
+    withCredentials([string(credentialsId: 'ef5f5354-9dd2-4fa1-a722-ec02bcf6b580', variable: 'SONAR_TOKEN')]) {
       sh '''
-        echo "[Stub] Running SonarQube analysis..."
-        echo "Detected: 2 code smells, 1 duplicate block"
-        echo "Report uploaded (simulated)" > sonar-report.txt
+        sonar-scanner \
+          -Dsonar.projectKey=house-price-predictor \
+          -Dsonar.sources=. \
+          -Dsonar.host.url=http://localhost:9000 \
+          -Dsonar.login=$SONAR_TOKEN
       '''
     }
+  }
+}
 
-    stage('Code Quality (Bandit)') {
-      sh '.venv/bin/bandit -r src -f txt -o bandit.txt || true'
-    }
+// ---- Code Quality (Bandit) ----
+stage('Code Quality (Bandit)') {
+  steps {
+    sh '.venv/bin/bandit -r src -f txt -o bandit.txt || true'
+  }
+}
 
     // ---- Security ----
     stage('Security (pip-audit)') {
