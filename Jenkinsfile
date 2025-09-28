@@ -41,19 +41,18 @@ node {
     // Code Quality: SonarQube (real scan using Dockerized sonar-scanner)
     stage('Code Quality (SonarQube)') {
       withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-        sh '''
-          set -eux
-          docker run --rm \
-            --network ci-net \
-            -e SONAR_HOST_URL=http://sonarqube:9000 \
-            -e SONAR_LOGIN=$SONAR_TOKEN \
-            -v "$PWD:/usr/src" \
-            sonarsource/sonar-scanner-cli:latest \
-              sonar-scanner \
-                -Dsonar.projectKey=house-price-predictor \
-                -Dsonar.sources=/usr/src \
-                -Dsonar.working.directory=/usr/src/.sonar
-        '''
+    sh """
+      docker run --rm \
+        --network ci-net \
+        -e SONAR_HOST_URL=http://sonarqube:9000 \
+        -e SONAR_LOGIN=${SONAR_TOKEN} \
+        -v "\$PWD:/usr/src" \
+        sonarsource/sonar-scanner-cli:latest \
+        sonar-scanner \
+          -Dsonar.projectKey=house-price-predictor \
+          -Dsonar.sources=/usr/src \
+          -Dsonar.working.directory=/usr/src/.sonar
+    """
       }
     }
 
