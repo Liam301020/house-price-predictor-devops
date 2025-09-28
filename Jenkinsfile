@@ -8,7 +8,7 @@ node {
     // NOTE: Put Jenkins & SonarQube onto the same user-defined Docker network.
     stage('Prepare Docker Network') {
       sh '''
-        set -euo pipefail
+        set -eux
         docker network create ci-net || true
         docker network connect ci-net sonarqube || true
         docker network connect ci-net jenkins   || true
@@ -18,7 +18,7 @@ node {
     stage('Checkout') {
       deleteDir()
       sh '''
-        set -euo pipefail
+        set -eux
         git --version
         git clone --depth 1 https://github.com/Liam301020/house-price-predictor-devops.git .
         git log -1 --oneline
@@ -27,7 +27,7 @@ node {
 
     stage('Build (venv & deps)') {
       sh '''
-        set -euo pipefail
+        set -eux
         python3 -m venv .venv
         .venv/bin/python -m pip install --upgrade pip
         .venv/bin/pip install --no-cache-dir -r requirements.txt
@@ -42,7 +42,7 @@ node {
     stage('Sonar token self-test') {
       withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
         sh '''
-          set -euo pipefail
+          set -eux
           docker run --rm --network ci-net curlimages/curl:8.10.1 \
             -s -u "${SONAR_TOKEN}:" http://sonarqube:9000/api/authentication/validate \
             | grep -q '"valid":true'
@@ -54,7 +54,7 @@ node {
     stage('Code Quality (SonarQube)') {
       withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
         sh '''
-          set -euo pipefail
+          set -eux
           docker run --rm \
             --network ci-net \
             -v "$PWD:/usr/src" \
@@ -72,7 +72,7 @@ node {
     // Code Quality: Bandit (security linter)
     stage('Code Quality (Bandit)') {
       sh '''
-        set -euo pipefail
+        set -eux
         .venv/bin/bandit -r src -f txt -o bandit.txt || true
       '''
     }
@@ -80,7 +80,7 @@ node {
     // Dependency Security (SCA)
     stage('Security (pip-audit)') {
       sh '''
-        set -euo pipefail
+        set -eux
         .venv/bin/pip-audit -f json -o pip-audit.json || true
         echo "[INFO] Review pip-audit.json and document issues (severity, fix)" > security-review.txt
       '''
@@ -89,7 +89,7 @@ node {
     // Build Docker artifact
     stage('Build Artifact (Docker)') {
       sh """
-        set -euo pipefail
+        set -eux
         docker build -t house-price-predictor:${BUILD_NUMBER} .
         docker images | head -n 10
       """
@@ -98,7 +98,7 @@ node {
     // Deploy to a local staging container
     stage('Deploy (staging)') {
       sh '''
-        set -euo pipefail
+        set -eux
         docker rm -f hp-stg || true
         docker run -d --name hp-stg -p 8081:8501 house-price-predictor:${BUILD_NUMBER}
       '''
@@ -112,7 +112,7 @@ node {
         passwordVariable: 'DOCKER_PASS'
       )]) {
         sh '''
-          set -euo pipefail
+          set -eux
           REPO="${DOCKER_USER}/house-price-predictor"
           [ -n "'${DOCKER_REPO}'" ] && REPO="'${DOCKER_REPO}'"
 
@@ -132,7 +132,7 @@ node {
     // Monitoring: container health + logs
     stage('Monitoring (health-check)') {
       sh '''
-        set -euo pipefail
+        set -eux
         for i in $(seq 1 20); do
           st=$(docker inspect -f "{{.State.Health.Status}}" hp-stg || echo "starting")
           echo "hp-stg health: $st"
