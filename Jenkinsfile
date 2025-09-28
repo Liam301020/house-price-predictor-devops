@@ -1,10 +1,11 @@
-// Jenkinsfile (Scripted Pipeline) — Flake8 + Black, no SonarQube
+// Jenkinsfile (Scripted Pipeline) — matches table: pytest, Bandit, pip-audit, SonarQube (stub)
 
 node {
   def DOCKER_REPO = 'liamnguyen301020/house-price-predictor'
 
   timestamps {
 
+    // 1) Checkout
     stage('Checkout') {
       deleteDir()
       sh '''
@@ -15,18 +16,17 @@ node {
       '''
     }
 
+    // 2) Build venv & install deps
     stage('Build (venv & deps)') {
       sh '''
         set -eux
         python3 -m venv .venv
         .venv/bin/python -m pip install --upgrade pip
         .venv/bin/pip install --no-cache-dir -r requirements.txt
-
-        # NOTE: Ensure flake8 & black are available even if not in requirements.txt
-        .venv/bin/pip install --no-cache-dir flake8 black
       '''
     }
 
+    // 3) Tests (pytest + coverage -> JUnit + coverage.xml)
     stage('Test') {
       sh '''
         set -eux
@@ -37,23 +37,16 @@ node {
       '''
     }
 
-    // Code Quality using Flake8 (lint) and Black (format check)
-    stage('Code Quality (Flake8 & Black)') {
+    // 4) Code Quality (SonarQube - stub only, not running scanner)
+    stage('Code Quality (SonarQube - STUB)') {
       sh '''
         set -eux
-
-        # NOTE: Flake8 linting (adjust paths/rules as you wish)
-        .venv/bin/flake8 --max-line-length=88 --statistics src tests
-
-        # NOTE: Black formatting check (fails if files need reformat)
-        .venv/bin/black --check .
-
-        # If you prefer auto-fix instead of failing, replace with:
-        # .venv/bin/black .
+        echo "[SonarQube STUB] Code quality analysis would run here in a full setup."
+        echo "[SonarQube STUB] Skipped due to env constraints (permissions/arch/credentials)."
       '''
     }
 
-    // Security lint (Bandit)
+    // 5) Security lint (Bandit)
     stage('Code Quality (Bandit)') {
       sh '''
         set -eux
@@ -61,7 +54,7 @@ node {
       '''
     }
 
-    // Dependency Security (pip-audit)
+    // 6) Dependency Security (pip-audit)
     stage('Security (pip-audit)') {
       sh '''
         set -eux
@@ -70,7 +63,7 @@ node {
       '''
     }
 
-    // Build Docker artifact
+    // 7) Build Docker artifact
     stage('Build Artifact (Docker)') {
       sh """
         set -eux
@@ -79,7 +72,7 @@ node {
       """
     }
 
-    // Deploy to a local staging container
+    // 8) Deploy to local staging
     stage('Deploy (staging)') {
       sh '''
         set -eux
@@ -88,7 +81,7 @@ node {
       '''
     }
 
-    // Release to Docker Hub
+    // 9) Release to Docker Hub
     stage('Release (Docker Hub)') {
       withCredentials([usernamePassword(
         credentialsId: 'dockerhub-creds',
@@ -111,7 +104,7 @@ node {
       }
     }
 
-    // Monitoring: container health + logs
+    // 10) Monitoring: container health + logs
     stage('Monitoring (health-check)') {
       sh '''
         set -eux
@@ -126,12 +119,12 @@ node {
       '''
     }
 
-    // Alerting (stub)
+    // 11) Alerting (stub)
     stage('Alerting (Stub)') {
       sh 'echo "[Alerting] If hp-stg crashes, notify team via Slack/Email (simulated)" > reports/alert.txt'
     }
 
-    // Publish reports
+    // 12) Publish reports
     stage('Archive Reports') {
       junit 'junit.xml'
       archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,security-review.txt,junit.xml,coverage.xml,reports/**', onlyIfSuccessful: false
