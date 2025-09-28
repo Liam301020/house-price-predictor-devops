@@ -1,19 +1,9 @@
-// Jenkinsfile (Scripted Pipeline)
+// Jenkinsfile (Scripted Pipeline) — Flake8 + Black, no SonarQube
 
 node {
   def DOCKER_REPO = 'liamnguyen301020/house-price-predictor'
 
   timestamps {
-
-    // NOTE: Put Jenkins & SonarQube onto the same user-defined Docker network.
-    stage('Prepare Docker Network') {
-      sh '''
-        set -eux
-        docker network create ci-net || true
-        docker network connect ci-net sonarqube || true
-        docker network connect ci-net jenkins   || true
-      '''
-    }
 
     stage('Checkout') {
       deleteDir()
@@ -31,60 +21,39 @@ node {
         python3 -m venv .venv
         .venv/bin/python -m pip install --upgrade pip
         .venv/bin/pip install --no-cache-dir -r requirements.txt
+
+        # NOTE: Ensure flake8 & black are available even if not in requirements.txt
+        .venv/bin/pip install --no-cache-dir flake8 black
       '''
     }
 
     stage('Test') {
-  sh '''
-    set -eux
-    PYTHONPATH=. .venv/bin/pytest \
-      --maxfail=1 --disable-warnings -q \
-      --junitxml=junit.xml \
-      --cov=src --cov-report=xml:coverage.xml
-  '''
-}
-
-    // NOTE: Self-test that the Sonar token stored in Jenkins credentials works against the SonarQube server.
-    stage('Sonar token self-test') {
-      withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-        sh '''
-          set -eux
-          docker run --rm --network ci-net curlimages/curl:8.10.1 \
-            -s -u "${SONAR_TOKEN}:" http://sonarqube:9000/api/authentication/validate \
-            | grep -q '"valid":true'
-        '''
-      }
+      sh '''
+        set -eux
+        PYTHONPATH=. .venv/bin/pytest \
+          --maxfail=1 --disable-warnings -q \
+          --junitxml=junit.xml \
+          --cov=src --cov-report=xml:coverage.xml
+      '''
     }
 
-    // Code Quality: SonarQube (Dockerized sonar-scanner)
-    stage('Code Quality (SonarQube)') {
-  withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-    sh """
-      set -eux
+    // Code Quality using Flake8 (lint) and Black (format check)
+    stage('Code Quality (Flake8 & Black)') {
+      sh '''
+        set -eux
 
-      # Bảo đảm thư mục làm việc có thể ghi (phòng hờ)
-      mkdir -p .sonar || true
-      chmod -R a+rwx .sonar || true
+        # NOTE: Flake8 linting (adjust paths/rules as you wish)
+        .venv/bin/flake8 --max-line-length=88 --statistics src tests
 
-      docker run --rm \
-        --user 0:0 \  # IMPORTANT: tránh lỗi AccessDenied khi tạo /usr/src/.sonar
-        --network ci-net \
-        -v "\$PWD:/usr/src" \
-        -e SONAR_HOST_URL=http://sonarqube:9000 \
-        sonarsource/sonar-scanner-cli:latest \
-        sonar-scanner \
-          -Dsonar.host.url=http://sonarqube:9000 \
-          -Dsonar.login="${SONAR_TOKEN}" \
-          -Dsonar.projectKey=house-price-predictor \
-          -Dsonar.sources=/usr/src \
-          -Dsonar.working.directory=/usr/src/.sonar \
-          -Dsonar.python.version=3.11 \
-          -Dsonar.python.coverage.reportPaths=/usr/src/coverage.xml
-    """
-  }
-}
+        # NOTE: Black formatting check (fails if files need reformat)
+        .venv/bin/black --check .
 
-    // Code Quality: Bandit (security linter)
+        # If you prefer auto-fix instead of failing, replace with:
+        # .venv/bin/black .
+      '''
+    }
+
+    // Security lint (Bandit)
     stage('Code Quality (Bandit)') {
       sh '''
         set -eux
@@ -92,7 +61,7 @@ node {
       '''
     }
 
-    // Dependency Security (SCA)
+    // Dependency Security (pip-audit)
     stage('Security (pip-audit)') {
       sh '''
         set -eux
@@ -119,28 +88,26 @@ node {
       '''
     }
 
-    // Release: push to Docker Hub
+    // Release to Docker Hub
     stage('Release (Docker Hub)') {
       withCredentials([usernamePassword(
         credentialsId: 'dockerhub-creds',
         usernameVariable: 'DOCKER_USER',
         passwordVariable: 'DOCKER_PASS'
       )]) {
-        sh '''
+        sh """
           set -eux
-          REPO="${DOCKER_USER}/house-price-predictor"
-          [ -n "'${DOCKER_REPO}'" ] && REPO="'${DOCKER_REPO}'"
+          REPO="${DOCKER_REPO}"; [ -z "\${REPO}" ] && REPO="\${DOCKER_USER}/house-price-predictor"
+          FULL_IMAGE="\${REPO}:${BUILD_NUMBER}"
+          FULL_LATEST="\${REPO}:latest"
 
-          FULL_IMAGE="${REPO}:${BUILD_NUMBER}"
-          FULL_LATEST="${REPO}:latest"
-
-          echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-          docker tag house-price-predictor:${BUILD_NUMBER} "${FULL_IMAGE}"
-          docker tag house-price-predictor:${BUILD_NUMBER} "${FULL_LATEST}"
-          docker push "${FULL_IMAGE}"
-          docker push "${FULL_LATEST}"
+          echo "\${DOCKER_PASS}" | docker login -u "\${DOCKER_USER}" --password-stdin
+          docker tag house-price-predictor:${BUILD_NUMBER} "\${FULL_IMAGE}"
+          docker tag house-price-predictor:${BUILD_NUMBER} "\${FULL_LATEST}"
+          docker push "\${FULL_IMAGE}"
+          docker push "\${FULL_LATEST}"
           docker logout || true
-        '''
+        """
       }
     }
 
@@ -159,7 +126,7 @@ node {
       '''
     }
 
-    // Alerting (stub) — replace with real Slack/email later
+    // Alerting (stub)
     stage('Alerting (Stub)') {
       sh 'echo "[Alerting] If hp-stg crashes, notify team via Slack/Email (simulated)" > reports/alert.txt'
     }
@@ -167,7 +134,7 @@ node {
     // Publish reports
     stage('Archive Reports') {
       junit 'junit.xml'
-      archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,security-review.txt,junit.xml,reports/**', onlyIfSuccessful: false
+      archiveArtifacts artifacts: 'bandit.txt,pip-audit.json,security-review.txt,junit.xml,coverage.xml,reports/**', onlyIfSuccessful: false
     }
   }
 }
